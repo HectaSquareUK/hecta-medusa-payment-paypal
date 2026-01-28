@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2026-01-28
 
 ### Added
-- PayPal payment integration for Medusa v2.10+
+- PayPal payment integration for Medusa v2.13+
 - Full Orders API support for order creation and capture
 - Automatic payment capture with CAPTURE intent
 - Complete refund support with capture ID tracking

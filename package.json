@@ -1,7 +1,7 @@
 {
   "name": "@hectasquare/medusa-payment-paypal",
   "version": "1.0.2",
-  "description": "PayPal Payment Provider for Medusa v2.10+ using the latest PayPal Server SDK with full Vault API support - Hecta Square Edition",
+  "description": "PayPal Payment Provider for Medusa v2.13+ using the latest PayPal Server SDK with full Vault API support - Hecta Square Edition",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -14,7 +14,7 @@
     "medusa-payment",
     "medusa-v2",
     "medusa-2.0",
-    "medusa-2.10",
+    "medusa-2.13",
     "paypal",
     "payment-provider",
     "vault-api",
@@ -33,15 +33,15 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@medusajs/framework": "^2.10.0",
-    "@medusajs/utils": "^2.10.0"
+    "@medusajs/framework": "^2.13.0",
+    "@medusajs/utils": "^2.13.0"
   },
   "dependencies": {
     "@paypal/paypal-server-sdk": "^1.1.0"
   },
   "devDependencies": {
-    "@medusajs/framework": "^2.10.3",
-    "@medusajs/utils": "^2.10.3",
+    "@medusajs/framework": "^2.13.0",
+    "@medusajs/utils": "^2.13.0",
     "@types/node": "^20.0.0",
     "typescript": "^5.3.0"
   },

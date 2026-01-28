@@ -1,39 +1,47 @@
-# 🔥 Medusa Payment PayPal in 100 Seconds
+# @hectasquare/medusa-payment-paypal
 
-Shipping a Medusa store? You need payments that actually work. Meet the production-ready PayPal module for Medusa v2.13+. High performance. Type-safe. Zero friction.
+A professional-grade PayPal payment provider module for Medusa v2.13+. This module facilitates seamless integration with the PayPal Orders API, supporting advanced features such as payment capture, refund management, and secure payment method vaulting.
 
-## 🚀 Why this is the GOAT of PayPal Modules
+## Key Features
 
-- **Orders API v2**: The industry standard for capturing payments. No legacy junk.
-- **Instant Capture**: Because nobody likes waiting for their money.
-- **Refunds That Work**: Full tracking with Capture IDs. No more missing transactions.
-- **Vault API**: Store payment methods securely. Let your customers skip the form.
-- **Real-time Webhooks**: Stay synced with PayPal events automatically.
-- **TypeScript Optimized**: 100% type-safe. Catch bugs before they ship.
+*   **PayPal Orders API v2 Integration**: Utilizes the latest PayPal API standards for robust payment processing.
+*   **Automatic Payment Capture**: Optimized workflows for immediate fund capture upon authorization.
+*   **Complete Refund Management**: Integrated support for full and partial refunds with comprehensive transaction tracking.
+*   **Vault API Support**: Securely store customer payment methods to enhance the checkout experience for returning users.
+*   **Webhook Synchronization**: Automated handling of PayPal system events to ensure real-time data consistency.
+*   **Type Safety**: Fully implemented in TypeScript to provide comprehensive compile-time verification.
 
-## 🛠️ Get it Running (Fast)
+## Installation
 
-Install the dependency and get back to building:
+To integrate the module into your Medusa project, install the package via your preferred package manager:
 
 ```bash
 npm install @hectasquare/medusa-payment-paypal
-# or if you like speed
+```
+
+Alternatively, using pnpm:
+
+```bash
 pnpm add @hectasquare/medusa-payment-paypal
 ```
 
-## ⚙️ Configure the Environment
+## Configuration
 
-Grab your keys from the [PayPal Developer Portal](https://developer.paypal.com/) and drop them in your `.env`:
+### 1. Environment Variables
+
+Configure the required PayPal credentials in your application's `.env` file:
 
 ```env
-PAYPAL_CLIENT_ID=your_id_here
-PAYPAL_CLIENT_SECRET=your_secret_here
-PAYPAL_SANDBOX=true # Switch to false for production
+PAYPAL_CLIENT_ID=your_paypal_client_id
+PAYPAL_CLIENT_SECRET=your_paypal_client_secret
+PAYPAL_SANDBOX=true
 ```
 
-## 💻 The Code
+Credentials can be obtained through the [PayPal Developer Portal](https://developer.paypal.com/).
 
-Wire it up in your `medusa-config.ts`. It's just a few lines of boilerplate:
+### 2. Medusa Configuration
+
+Register the provider within your `medusa-config.ts` configuration file:
 
 ```typescript
 import { defineConfig } from '@medusajs/framework'
@@ -54,33 +62,25 @@ export const config = defineConfig({
 })
 ```
 
-## 🏗️ How it Ships
+## Integration Workflow
 
-1. **Checkout**: Customer picks PayPal.
-2. **Handshake**: We talk to the Orders API.
-3. **Approval**: Customer approves on the PayPal UI.
-4. **Win**: Payment is captured and Medusa is updated.
+1.  **Selection**: The customer chooses PayPal as the payment method during checkout.
+2.  **Order Creation**: An order is initialized via the PayPal Orders API.
+3.  **Authorization**: The customer authorizes the transaction through the PayPal interface.
+4.  **Capture and Verification**: The system captures the payment and updates the order status in Medusa.
 
-## 📄 Options
+## Configuration Parameters
 
-| Option | Type | Required | Description |
-|--------|------|----------|-------------|
-| `clientId` | string | ✅ | PayPal Client ID |
-| `clientSecret` | string | ✅ | PayPal Client Secret |
-| `isSandbox` | boolean | ❌ | Sandbox toggle (default: false) |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `clientId` | string | Yes | The PayPal REST API Client ID. |
+| `clientSecret` | string | Yes | The PayPal REST API Client Secret. |
+| `isSandbox` | boolean | No | Enables the PayPal Sandbox environment (default: `false`). |
 
----
+## Support and Troubleshooting
 
-**Issues?** Check your credentials. 
-**Errors?** Check your types.
-**Ready?** Ship it. 🚀
-
-[GitHub Repository](https://github.com/HectaSquareUK/medusa-payment-paypal)
-
-## Contributing
-
-Contributions are welcome. Open issues or pull requests on our [GitHub repository](https://github.com/HectaSquareUK/medusa-payment-paypal).
+For technical assistance or to report issues, please consult the documentation or visit our [GitHub repository](https://github.com/HectaSquareUK/hecta-medusa-payment-paypal).
 
 ## License
 
-MIT - see [LICENSE](LICENSE)
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
