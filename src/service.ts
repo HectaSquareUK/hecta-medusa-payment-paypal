@@ -41,9 +41,8 @@ import {
   Environment, 
   OrdersController, 
   PaymentsController, 
-  VaultController,
-  CheckoutPaymentIntent,
-  OrderApplicationContextUserAction,
+  VaultController, 
+  CheckoutPaymentIntent 
 } from "@paypal/paypal-server-sdk";
 
 interface PayPalOptions {
@@ -83,6 +82,25 @@ export default class PayPalProviderService extends AbstractPaymentProvider<PayPa
   }
 
   /**
+   * Helper to extract Capture ID from various possible paths (camelCase vs snake_case)
+   */
+  private getCaptureId(result: any): string | undefined {
+    // 1. Check root capture_id (if we saved it manually before)
+    if (result?.capture_id) return result.capture_id;
+
+    // 2. Check CamelCase (New SDK standard)
+    const camelPath = result?.purchaseUnits?.[0]?.payments?.captures?.[0]?.id;
+    if (camelPath) return camelPath;
+
+    // 3. Check SnakeCase (Old API standard)
+    const snakePath = result?.purchase_units?.[0]?.payments?.captures?.[0]?.id;
+    if (snakePath) return snakePath;
+
+    // 4. Fallback for weird structures
+    return result?.payments?.captures?.[0]?.id;
+  }
+
+  /**
    * Create PayPal order
    */
   async initiatePayment(input: InitiatePaymentInput): Promise<InitiatePaymentOutput> {
@@ -97,13 +115,13 @@ export default class PayPalProviderService extends AbstractPaymentProvider<PayPa
             {
               amount: {
                 currencyCode: currency_code.toUpperCase(),
-                value: (amount as number).toFixed(2), // reverted from 100 division
+                value: ((amount as number) / 100).toFixed(2), // FIX 1: Cast amount to number
               },
-              customId: (data?.session_id as string) || undefined,
+              customId: data?.session_id as string || undefined,
             },
           ],
           applicationContext: {
-            userAction: OrderApplicationContextUserAction.PayNow,
+            userAction: "PAY_NOW" as any, // FIX 2: Cast string to match SDK type
           },
         },
         prefer: "return=representation",
@@ -142,13 +160,12 @@ export default class PayPalProviderService extends AbstractPaymentProvider<PayPa
       const result = response.result as any;
       
       // Extract and store capture_id for refunds
-      const captureId = result?.purchase_units?.[0]?.payments?.captures?.[0]?.id;
+      const captureId = this.getCaptureId(result);
       
       console.log("[PayPal] ========== AUTHORIZE PAYMENT ==========");
       console.log("[PayPal] Order ID:", result?.id);
       console.log("[PayPal] Order Status:", result?.status);
-      // 👇 This line will print the FULL JSON so we can see where the ID is hiding
-      console.log("[PayPal] FULL RESPONSE:", JSON.stringify(result, null, 2)); 
+      console.log("[PayPal] Capture ID Found:", captureId);
       console.log("[PayPal] ========================================");
 
       const statusResult = this.getStatus(result);
@@ -210,13 +227,11 @@ export default class PayPalProviderService extends AbstractPaymentProvider<PayPa
       });
       
       const result = response.result as any;
-      
-      // Extract and store capture_id for refunds
-      const captureId = result?.purchase_units?.[0]?.payments?.captures?.[0]?.id;
+      const captureId = this.getCaptureId(result);
       
       console.log("[PayPal] ========== GET PAYMENT STATUS ==========");
       console.log("[PayPal] Order ID:", result?.id);
-      console.log("[PayPal] Capture ID:", captureId);
+      console.log("[PayPal] Capture ID Found:", captureId);
       console.log("[PayPal] ==========================================");
 
       const statusResult = this.getStatus(result);
@@ -240,12 +255,10 @@ export default class PayPalProviderService extends AbstractPaymentProvider<PayPa
     const { data, amount } = input;
 
     console.log("[PayPal] ========== REFUND PAYMENT ==========");
-    console.log("[PayPal] Input data:", JSON.stringify(data, null, 2));
+    console.log("[PayPal] Input data (keys):", Object.keys(data || {}));
     
-    // Extract capture ID from data - try multiple locations
-    let captureId = data?.capture_id;
-    if (!captureId) { captureId = (data as any)?.purchase_units?.[0]?.payments?.captures?.[0]?.id; }
-    if (!captureId) { captureId = (data as any)?.payments?.captures?.[0]?.id; }
+    // Extract capture ID using our robust helper
+    const captureId = this.getCaptureId(data);
 
     console.log("[PayPal] Final captureId:", captureId);
     console.log("[PayPal] ========================================");
@@ -259,10 +272,15 @@ export default class PayPalProviderService extends AbstractPaymentProvider<PayPa
     try {
       const refundRequest: any = {};
       if (amount && typeof amount === "number") {
-        const currencyCode = (data as any)?.purchase_units?.[0]?.amount?.currency_code || "USD";
+        // Handle currency code extraction safely
+        const purchaseUnits = (data as any)?.purchaseUnits || (data as any)?.purchase_units || [];
+        const currencyCode = purchaseUnits?.[0]?.amount?.currencyCode || 
+                             purchaseUnits?.[0]?.amount?.currency_code || 
+                             "USD";
+                             
         refundRequest.amount = {
           currencyCode: currencyCode.toUpperCase(),
-          value: amount.toFixed(2),
+          value: (amount / 100).toFixed(2),
         };
       }
 
@@ -296,15 +314,20 @@ export default class PayPalProviderService extends AbstractPaymentProvider<PayPa
    * Handle webhook
    */
   async getWebhookActionAndData(webhookData: ProviderWebhookPayload["payload"]): Promise<WebhookActionResult> {
-    const { resource, event_type } = webhookData.data as any;
+    // FIX 3: Cast webhookData to any to allow access to resource/event_type
+    const payload = webhookData as any;
+    const { resource, event_type } = payload;
+
+    // Helper to safely get value from possibly mixed case objects
+    const getAmount = (obj: any) => parseFloat(obj?.amount?.value || "0") * 100;
 
     switch (event_type) {
       case "PAYMENT.CAPTURE.COMPLETED":
         return {
           action: PaymentActions.SUCCESSFUL,
           data: {
-            session_id: resource?.custom_id,
-            amount: parseFloat(resource?.amount?.value || "0") * 100,
+            session_id: resource?.custom_id || resource?.customId,
+            amount: getAmount(resource),
           },
         };
       case "PAYMENT.CAPTURE.DENIED":
@@ -312,24 +335,26 @@ export default class PayPalProviderService extends AbstractPaymentProvider<PayPa
         return {
           action: PaymentActions.FAILED,
           data: {
-            session_id: resource?.custom_id,
-            amount: parseFloat(resource?.amount?.value || "0") * 100,
+            session_id: resource?.custom_id || resource?.customId,
+            amount: getAmount(resource),
           },
         };
       case "CHECKOUT.ORDER.APPROVED":
+        // Handle purchaseUnits vs purchase_units
+        const units = resource?.purchaseUnits || resource?.purchase_units || [];
         return {
           action: PaymentActions.AUTHORIZED,
           data: {
-            session_id: resource?.purchase_units?.[0]?.custom_id,
-            amount: parseFloat(resource?.purchase_units?.[0]?.amount?.value || "0") * 100,
+            session_id: units?.[0]?.custom_id || units?.[0]?.customId,
+            amount: parseFloat(units?.[0]?.amount?.value || "0") * 100,
           },
         };
       case "PAYMENT.CAPTURE.REFUNDED":
         return {
           action: PaymentActions.SUCCESSFUL,
           data: {
-            session_id: resource?.custom_id,
-            amount: parseFloat(resource?.amount?.value || "0") * 100,
+            session_id: resource?.custom_id || resource?.customId,
+            amount: getAmount(resource),
           },
         };
       default:
