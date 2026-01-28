@@ -52,9 +52,10 @@ export const config = defineConfig({
       {
         resolve: '@hectasquare/medusa-payment-paypal',
         options: {
+          isSandbox: isSandbox,
           clientId: process.env.PAYPAL_CLIENT_ID,
           clientSecret: process.env.PAYPAL_CLIENT_SECRET,
-          isSandbox: process.env.PAYPAL_SANDBOX === 'true'
+          isSandbox: process.env.PAYPAL_SANDBOX === 'true'// add PAYPAL_SANDBOX in env to true or false , variable to toggle sandbox mode
         }
       }
     ]
