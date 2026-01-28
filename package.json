@@ -1,6 +1,6 @@
 {
   "name": "@hectasquare/medusa-payment-paypal",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "PayPal Payment Provider for Medusa v2.13+ using the latest PayPal Server SDK with full Vault API support - Hecta Square Edition",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
