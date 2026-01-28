@@ -115,13 +115,14 @@ export default class PayPalProviderService extends AbstractPaymentProvider<PayPa
             {
               amount: {
                 currencyCode: currency_code.toUpperCase(),
-                value: ((amount as number) / 100).toFixed(2), // FIX 1: Cast amount to number
+                // CORRECTED: No division by 100, just format to string
+                value: Number(amount).toFixed(2), 
               },
               customId: data?.session_id as string || undefined,
             },
           ],
           applicationContext: {
-            userAction: "PAY_NOW" as any, // FIX 2: Cast string to match SDK type
+            userAction: "PAY_NOW" as any,
           },
         },
         prefer: "return=representation",
@@ -280,7 +281,8 @@ export default class PayPalProviderService extends AbstractPaymentProvider<PayPa
                              
         refundRequest.amount = {
           currencyCode: currencyCode.toUpperCase(),
-          value: (amount / 100).toFixed(2),
+          // CORRECTED: No division by 100
+          value: Number(amount).toFixed(2), 
         };
       }
 
@@ -314,12 +316,12 @@ export default class PayPalProviderService extends AbstractPaymentProvider<PayPa
    * Handle webhook
    */
   async getWebhookActionAndData(webhookData: ProviderWebhookPayload["payload"]): Promise<WebhookActionResult> {
-    // FIX 3: Cast webhookData to any to allow access to resource/event_type
     const payload = webhookData as any;
     const { resource, event_type } = payload;
 
     // Helper to safely get value from possibly mixed case objects
-    const getAmount = (obj: any) => parseFloat(obj?.amount?.value || "0") * 100;
+    // CORRECTED: No multiplication by 100 for incoming webhook amounts if you are not using cents
+    const getAmount = (obj: any) => parseFloat(obj?.amount?.value || "0");
 
     switch (event_type) {
       case "PAYMENT.CAPTURE.COMPLETED":
@@ -346,7 +348,8 @@ export default class PayPalProviderService extends AbstractPaymentProvider<PayPa
           action: PaymentActions.AUTHORIZED,
           data: {
             session_id: units?.[0]?.custom_id || units?.[0]?.customId,
-            amount: parseFloat(units?.[0]?.amount?.value || "0") * 100,
+            // CORRECTED: No multiplication by 100
+            amount: parseFloat(units?.[0]?.amount?.value || "0"),
           },
         };
       case "PAYMENT.CAPTURE.REFUNDED":
