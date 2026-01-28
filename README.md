@@ -3,7 +3,7 @@
 A professional-grade PayPal payment provider module for Medusa v2.13+. This module facilitates seamless integration with the PayPal Orders API, supporting advanced features such as payment capture, refund management, and secure payment method vaulting.
 
 ## Key Features
-
+WORKING MEDUSA REFUND --------
 *   **PayPal Orders API v2 Integration**: Utilizes the latest PayPal API standards for robust payment processing.
 *   **Automatic Payment Capture**: Optimized workflows for immediate fund capture upon authorization.
 *   **Complete Refund Management**: Integrated support for full and partial refunds with comprehensive transaction tracking.

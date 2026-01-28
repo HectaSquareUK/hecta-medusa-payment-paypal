@@ -2,7 +2,8 @@ import {
   AbstractPaymentProvider, 
   MedusaError, 
   PaymentActions, 
-  PaymentSessionStatus 
+  PaymentSessionStatus,
+  BigNumber 
 } from "@medusajs/framework/utils";
 import { 
   AuthorizePaymentInput, 
@@ -81,6 +82,10 @@ export default class PayPalProviderService extends AbstractPaymentProvider<PayPa
     });
   }
 
+  // ==========================================
+  // HELPERS
+  // ==========================================
+
   /**
    * Helper to extract Capture ID from various possible paths (camelCase vs snake_case)
    */
@@ -88,17 +93,41 @@ export default class PayPalProviderService extends AbstractPaymentProvider<PayPa
     // 1. Check root capture_id (if we saved it manually before)
     if (result?.capture_id) return result.capture_id;
 
+    // CRITICAL FIX: I removed the check for root ID + "COMPLETED". 
+    // This was grabbing the Order ID instead of the Capture ID, causing the refund error.
+
     // 2. Check CamelCase (New SDK standard)
     const camelPath = result?.purchaseUnits?.[0]?.payments?.captures?.[0]?.id;
     if (camelPath) return camelPath;
 
-    // 3. Check SnakeCase (Old API standard)
+    // 3. Check SnakeCase (Old API standard / Your Logs)
     const snakePath = result?.purchase_units?.[0]?.payments?.captures?.[0]?.id;
     if (snakePath) return snakePath;
 
     // 4. Fallback for weird structures
     return result?.payments?.captures?.[0]?.id;
   }
+
+  /**
+   * Helper to extract Currency Code safely
+   */
+  private getCurrencyCode(data: any): string {
+    if (data?.currency_code) return data.currency_code;
+    
+    // Check CamelCase
+    const camelPath = data?.purchaseUnits?.[0]?.amount?.currencyCode;
+    if (camelPath) return camelPath;
+
+    // Check SnakeCase
+    const snakePath = data?.purchase_units?.[0]?.amount?.currency_code;
+    if (snakePath) return snakePath;
+
+    return "USD"; 
+  }
+
+  // ==========================================
+  // CORE PAYMENT METHODS
+  // ==========================================
 
   /**
    * Create PayPal order
@@ -108,23 +137,36 @@ export default class PayPalProviderService extends AbstractPaymentProvider<PayPa
     const ordersController = new OrdersController(this.client_);
 
     try {
-      const response = await ordersController.createOrder({
-        body: {
-          intent: CheckoutPaymentIntent.Capture,
-          purchaseUnits: [
-            {
-              amount: {
-                currencyCode: currency_code.toUpperCase(),
-                // CORRECTED: No division by 100, just format to string
-                value: Number(amount).toFixed(2), 
-              },
-              customId: data?.session_id as string || undefined,
+      const body: any = {
+        intent: CheckoutPaymentIntent.Capture,
+        purchaseUnits: [
+          {
+            amount: {
+              currencyCode: currency_code.toUpperCase(),
+              // CORRECTED: Use .toFixed(2) to prevent "DECIMAL_PRECISION" errors
+              value: new BigNumber(amount).numeric.toFixed(2), 
             },
-          ],
-          applicationContext: {
-            userAction: "PAY_NOW" as any,
+            customId: data?.session_id as string || undefined,
           },
-        },
+        ],
+      };
+
+      // Handle Saved Payment Methods (Token Charging)
+      // This allows your storefront to pass a resource_id to charge a saved wallet
+      if (data?.resource_id && data?.is_saved_token) {
+         body.paymentSource = {
+          token: {
+            id: data.resource_id,
+            type: "BILLING_AGREEMENT"
+          }
+         };
+      } else {
+         // Standard Checkout
+         body.applicationContext = { userAction: "PAY_NOW" };
+      }
+
+      const response = await ordersController.createOrder({
+        body: body,
         prefer: "return=representation",
       });
 
@@ -162,6 +204,7 @@ export default class PayPalProviderService extends AbstractPaymentProvider<PayPa
       
       // Extract and store capture_id for refunds
       const captureId = this.getCaptureId(result);
+      const currencyCode = this.getCurrencyCode(result);
       
       console.log("[PayPal] ========== AUTHORIZE PAYMENT ==========");
       console.log("[PayPal] Order ID:", result?.id);
@@ -172,7 +215,11 @@ export default class PayPalProviderService extends AbstractPaymentProvider<PayPa
       const statusResult = this.getStatus(result);
       return {
         ...statusResult,
-        data: { ...statusResult.data, capture_id: captureId }
+        data: { 
+            ...statusResult.data, 
+            capture_id: captureId, 
+            currency_code: currencyCode 
+        }
       };
     } catch (error: any) {
       // If already captured (422 error), get status
@@ -229,6 +276,7 @@ export default class PayPalProviderService extends AbstractPaymentProvider<PayPa
       
       const result = response.result as any;
       const captureId = this.getCaptureId(result);
+      const currencyCode = this.getCurrencyCode(result);
       
       console.log("[PayPal] ========== GET PAYMENT STATUS ==========");
       console.log("[PayPal] Order ID:", result?.id);
@@ -239,7 +287,11 @@ export default class PayPalProviderService extends AbstractPaymentProvider<PayPa
       
       return {
         ...statusResult,
-        data: { ...statusResult.data, capture_id: captureId }
+        data: { 
+            ...statusResult.data, 
+            capture_id: captureId, 
+            currency_code: currencyCode
+        }
       };
     } catch (error) {
       return {
@@ -262,6 +314,7 @@ export default class PayPalProviderService extends AbstractPaymentProvider<PayPa
     const captureId = this.getCaptureId(data);
 
     console.log("[PayPal] Final captureId:", captureId);
+    console.log("[PayPal] Raw Amount from Medusa:", amount);
     console.log("[PayPal] ========================================");
 
     if (!captureId) {
@@ -272,19 +325,25 @@ export default class PayPalProviderService extends AbstractPaymentProvider<PayPa
 
     try {
       const refundRequest: any = {};
-      if (amount && typeof amount === "number") {
-        // Handle currency code extraction safely
-        const purchaseUnits = (data as any)?.purchaseUnits || (data as any)?.purchase_units || [];
-        const currencyCode = purchaseUnits?.[0]?.amount?.currencyCode || 
-                             purchaseUnits?.[0]?.amount?.currency_code || 
-                             "USD";
-                             
+      
+      if (amount) {
+        const currencyCode = this.getCurrencyCode(data);
+        
+        // CORRECTED: Use .toFixed(2) to ensure strict decimal precision (e.g. 3.00)
+        // This fixes both "Partial Refund" structure AND "DECIMAL_PRECISION" errors
+        const refundValue = new BigNumber(amount).numeric.toFixed(2);
+        
+        console.log(`[PayPal] Processing Partial Refund: ${refundValue} ${currencyCode}`);
+
+        // FIX: Properly nested amount object
         refundRequest.amount = {
           currencyCode: currencyCode.toUpperCase(),
-          // CORRECTED: No division by 100
-          value: Number(amount).toFixed(2), 
+          value: refundValue, 
         };
       }
+
+      // Log payload to verify structure
+      console.log("[PayPal] Final Payload Sent:", JSON.stringify(refundRequest, null, 2));
 
       const response = await paymentsController.refundCapturedPayment({
         captureId: captureId as string,
@@ -312,6 +371,10 @@ export default class PayPalProviderService extends AbstractPaymentProvider<PayPa
     return await this.initiatePayment(input);
   }
 
+  // ==========================================
+  // WEBHOOKS
+  // ==========================================
+
   /**
    * Handle webhook
    */
@@ -320,7 +383,6 @@ export default class PayPalProviderService extends AbstractPaymentProvider<PayPa
     const { resource, event_type } = payload;
 
     // Helper to safely get value from possibly mixed case objects
-    // CORRECTED: No multiplication by 100 for incoming webhook amounts if you are not using cents
     const getAmount = (obj: any) => parseFloat(obj?.amount?.value || "0");
 
     switch (event_type) {
@@ -348,7 +410,6 @@ export default class PayPalProviderService extends AbstractPaymentProvider<PayPa
           action: PaymentActions.AUTHORIZED,
           data: {
             session_id: units?.[0]?.custom_id || units?.[0]?.customId,
-            // CORRECTED: No multiplication by 100
             amount: parseFloat(units?.[0]?.amount?.value || "0"),
           },
         };
@@ -412,6 +473,10 @@ export default class PayPalProviderService extends AbstractPaymentProvider<PayPa
         };
     }
   }
+
+  // ==========================================
+  // ACCOUNT HOLDER METHODS
+  // ==========================================
 
   /**
    * Create account holder
