@@ -147,7 +147,8 @@ export default class PayPalProviderService extends AbstractPaymentProvider<PayPa
       console.log("[PayPal] ========== AUTHORIZE PAYMENT ==========");
       console.log("[PayPal] Order ID:", result?.id);
       console.log("[PayPal] Order Status:", result?.status);
-      console.log("[PayPal] Capture ID:", captureId);
+      // 👇 This line will print the FULL JSON so we can see where the ID is hiding
+      console.log("[PayPal] FULL RESPONSE:", JSON.stringify(result, null, 2)); 
       console.log("[PayPal] ========================================");
 
       const statusResult = this.getStatus(result);
